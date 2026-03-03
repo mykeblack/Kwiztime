@@ -1,0 +1,1 @@
+Create SO_GameConfig in Unity (ScriptableObject).
