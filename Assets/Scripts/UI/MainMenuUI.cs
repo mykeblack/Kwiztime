@@ -36,6 +36,10 @@ namespace Kwiztime.UI
         [SerializeField] private string gameSceneName      = "Game";
         [SerializeField] private string customiseSceneName = "Customisation"; // FIX: unified spelling
 
+        [Header("Options Sliders")]
+        [SerializeField] private UnityEngine.UI.Slider sfxSlider;
+        [SerializeField] private UnityEngine.UI.Slider musicSlider;
+
         private void Awake()
         {
             // FIX: avatar check moved to Awake first, before any wiring, with early return
@@ -48,6 +52,7 @@ namespace Kwiztime.UI
             SetupText();
             CloseAllModals();
             WireButtons();
+            SetupOptions();
 
 #if UNITY_WEBGL
             if (quitButton != null) quitButton.gameObject.SetActive(false);
@@ -61,6 +66,48 @@ namespace Kwiztime.UI
             if (titleText    != null) titleText.text    = "Kwiztime";
             if (subtitleText != null) subtitleText.text = "A soft party quiz for everyone";
             if (footerText != null) footerText.text = "Bots may join if lobbies aren't full. Legend bots are rare and award bonus coins. <sprite name=\"icon_coin\">";
+        }
+
+        private void SetupOptions()
+        {
+            // Load saved values, defaulting to 80% and 60%
+            float sfx = PlayerPrefs.GetFloat("sfxVolume", 0.8f);
+            float music = PlayerPrefs.GetFloat("musicVolume", 0.6f);
+
+            if (sfxSlider != null) sfxSlider.value = sfx;
+            if (musicSlider != null) musicSlider.value = music;
+
+            // Save only when the player stops dragging
+            sfxSlider?.onValueChanged.AddListener(_ => { });
+            musicSlider?.onValueChanged.AddListener(_ => { });
+
+            sfxSlider?.GetComponent<UnityEngine.EventSystems.EventTrigger>()?.triggers.Clear();
+
+            // Use EndDrag event to save
+            AddSliderSaveTrigger(sfxSlider, "sfxVolume");
+            AddSliderSaveTrigger(musicSlider, "musicVolume");
+        }
+
+        private void AddSliderSaveTrigger(UnityEngine.UI.Slider slider, string key)
+        {
+            if (slider == null) return;
+
+            var trigger = slider.GetComponent<UnityEngine.EventSystems.EventTrigger>()
+                ?? slider.gameObject.AddComponent<UnityEngine.EventSystems.EventTrigger>();
+
+            var entry = new UnityEngine.EventSystems.EventTrigger.Entry
+            {
+                eventID = UnityEngine.EventSystems.EventTriggerType.PointerUp
+            };
+
+            entry.callback.AddListener(_ =>
+            {
+                PlayerPrefs.SetFloat(key, slider.value);
+                PlayerPrefs.Save();
+                Debug.Log($"[Options] Saved {key}: {slider.value:F2}");
+            });
+
+            trigger.triggers.Add(entry);
         }
 
         private void CloseAllModals()
