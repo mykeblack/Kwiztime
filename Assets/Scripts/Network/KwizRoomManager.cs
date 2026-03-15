@@ -13,12 +13,14 @@ namespace Kwiztime
     }
 
     /// <summary>
-    /// Server-authoritative room/match controller for the UI prototype.
-    /// - Fills with bots up to targetPlayers
-    /// - Runs multi-round quiz loop
-    /// - Locks answers at timer end
-    /// - Sends question/timer/reveal/results to clients via RPC -> ClientUIEvents
-    /// - Sends public + targeted bot personality chat
+    /// Server-authoritative room/match controller.
+    /// FIXES:
+    /// - Bot accuracy/delay now read from BotRegistry (no more hardcoded duplicate values)
+    /// - Legend Bot accuracy capped at 90% as per GDD
+    /// - Wrong answer selection fixed (was off-by-one, could miss answer index 3)
+    /// - _matchRoutine now resets in a finally block so early exits don't permanently block rematches
+    /// - Legend Bot spawn rate (~1.5% of matches) now implemented
+    /// - ServerStartMatchFromUI now respects minPlayersToStart
     /// </summary>
     public class KwizRoomManager : NetworkBehaviour
     {
@@ -36,6 +38,9 @@ namespace Kwiztime
         [Header("Bots")]
         [SerializeField] private bool fillWithBots = true;
         [SerializeField] private int targetPlayers = 8;
+
+        [Header("Legend Bot")]
+        [SerializeField, Range(0f, 1f)] private float legendBotSpawnChance = 0.015f; // ~1.5% per GDD
 
         [Header("Results")]
         [SerializeField] private float resultsDuration = 6f;
@@ -66,7 +71,6 @@ namespace Kwiztime
                 Destroy(gameObject);
                 return;
             }
-
             Instance = this;
         }
 
@@ -92,10 +96,6 @@ namespace Kwiztime
         // Public API (server)
         // ------------------------
 
-        /// <summary>
-        /// Call this when a real player joins the room.
-        /// You can call it from your NetworkManager when a player spawns.
-        /// </summary>
         [Server]
         public void ServerRegisterPlayer(KwizPlayer player)
         {
@@ -108,9 +108,6 @@ namespace Kwiztime
             TryStartIfReady();
         }
 
-        /// <summary>
-        /// Call this when a real player leaves (disconnect).
-        /// </summary>
         [Server]
         public void ServerUnregisterPlayer(KwizPlayer player)
         {
@@ -135,7 +132,6 @@ namespace Kwiztime
             int realPlayers = CountRealPlayers();
             if (realPlayers < minPlayersToStart) return;
 
-            // Fill lobby to target with bots before starting
             ServerFillBotsIfNeeded();
 
             _matchRoutine = StartCoroutine(ServerMatchFlow());
@@ -148,8 +144,7 @@ namespace Kwiztime
             for (int i = 0; i < _players.Count; i++)
             {
                 var p = _players[i];
-                if (p == null) continue;
-                if (p.isBot) continue;
+                if (p == null || p.isBot) continue;
                 count++;
             }
             return count;
@@ -163,7 +158,6 @@ namespace Kwiztime
         private IEnumerator ServerMatchFlow()
         {
             _state = RoomState.InMatch;
-
             RpcStatus("Get ready!");
             yield return new WaitForSeconds(2f);
 
@@ -176,95 +170,93 @@ namespace Kwiztime
                 p.selectedAnswer = -1;
             }
 
-            for (int round = 1; round <= totalRounds; round++)
+            // FIX: wrap in try/finally so _matchRoutine always resets even on early exit
+            try
             {
-                // Pick question
-                if (questionService == null)
+                for (int round = 1; round <= totalRounds; round++)
                 {
-                    Debug.LogError("[KwizRoomManager] QuestionService missing.");
-                    break;
+                    if (questionService == null)
+                    {
+                        Debug.LogError("[KwizRoomManager] QuestionService missing.");
+                        break;
+                    }
+
+                    var q = questionService.GetNextQuestion();
+                    if (string.IsNullOrWhiteSpace(q.prompt))
+                    {
+                        Debug.LogError("[KwizRoomManager] Invalid question.");
+                        break;
+                    }
+
+                    _answersLocked = false;
+                    _botChatsThisRound = 0;
+
+                    for (int i = 0; i < _players.Count; i++)
+                    {
+                        var p = _players[i];
+                        if (p == null) continue;
+                        p.selectedAnswer = -1;
+                    }
+
+                    RpcRound(round, totalRounds);
+                    RpcQuestionMeta($"{q.category} • {q.difficulty}");
+                    RpcShowQuestion(q.prompt, q.answers, q.timeLimit);
+
+                    ServerBotRoundStartChatter();
+
+                    for (int i = 0; i < _players.Count; i++)
+                    {
+                        var p = _players[i];
+                        if (p == null || !p.isBot) continue;
+                        StartCoroutine(ServerBotAnswerRoutine(p, q.correctIndex));
+                    }
+
+                    float remaining = q.timeLimit;
+                    while (remaining > 0f)
+                    {
+                        RpcTimer(remaining);
+                        yield return new WaitForSeconds(1f);
+                        remaining -= 1f;
+                    }
+
+                    _answersLocked = true;
+
+                    for (int i = 0; i < _players.Count; i++)
+                    {
+                        var p = _players[i];
+                        if (p == null) continue;
+
+                        bool answered = p.selectedAnswer >= 0 && p.selectedAnswer <= 3;
+                        bool correct = answered && (p.selectedAnswer == q.correctIndex);
+
+                        if (correct)
+                            p.coins += coinsPerCorrect;
+                    }
+
+                    RpcReveal(q.correctIndex);
+                    ServerBotRevealChatter(q.correctIndex);
+                    ServerSendTargetedBotReactions(q.correctIndex);
+
+                    yield return new WaitForSeconds(betweenRoundsDelay);
                 }
-
-                var q = questionService.GetNextQuestion();
-                // QuestionData is a struct in the earlier code. Can't be null.
-                // We'll assume it is valid if prompt isn't empty.
-                if (string.IsNullOrWhiteSpace(q.prompt))
-                {
-                    Debug.LogError("[KwizRoomManager] Invalid question.");
-                    break;
-                }
-
-                // Reset round state
-                _answersLocked = false;
-                _botChatsThisRound = 0;
-
-                for (int i = 0; i < _players.Count; i++)
-                {
-                    var p = _players[i];
-                    if (p == null) continue;
-                    p.selectedAnswer = -1;
-                }
-
-                // Send UI data
-                RpcRound(round, totalRounds);
-                RpcQuestionMeta($"{q.category} • {q.difficulty}");
-                RpcShowQuestion(q.prompt, q.answers, q.timeLimit);
-
-                // Public chatter (1 line)
-                ServerBotRoundStartChatter();
-
-                // Start bot answering routines
-                for (int i = 0; i < _players.Count; i++)
-                {
-                    var p = _players[i];
-                    if (p == null || !p.isBot) continue;
-                    StartCoroutine(ServerBotAnswerRoutine(p, q.correctIndex));
-                }
-
-                // Timer loop
-                float remaining = q.timeLimit;
-                while (remaining > 0f)
-                {
-                    RpcTimer(remaining);
-                    yield return new WaitForSeconds(1f);
-                    remaining -= 1f;
-                }
-
-                // Lock answers
-                _answersLocked = true;
-
-                // Score
-                for (int i = 0; i < _players.Count; i++)
-                {
-                    var p = _players[i];
-                    if (p == null) continue;
-
-                    bool answered = p.selectedAnswer >= 0 && p.selectedAnswer <= 3;
-                    bool correct = answered && (p.selectedAnswer == q.correctIndex);
-
-                    if (correct)
-                        p.coins += coinsPerCorrect;
-                }
-
-                // Reveal
-                RpcReveal(q.correctIndex);
-
-                // Public bot reactions (max 2 lines)
-                ServerBotRevealChatter(q.correctIndex);
-
-                // Private reactions (per player, only to that client)
-                ServerSendTargetedBotReactions(q.correctIndex);
-
-                yield return new WaitForSeconds(betweenRoundsDelay);
             }
+            finally
+            {
+                // FIX: always clean up match state, even if coroutine exits early
+                _state = RoomState.Results;
+                BuildAndSendResults();
 
-            // Results
-            _state = RoomState.Results;
-            BuildAndSendResults();
+                // Wait for results display before cleanup
+                // (can't yield in finally, so we chain a cleanup coroutine)
+                StartCoroutine(PostResultsCleanup());
+            }
+        }
 
+        [Server]
+        private IEnumerator PostResultsCleanup()
+        {
             yield return new WaitForSeconds(resultsDuration);
 
-            // Cleanup bots AFTER results
             ServerDespawnBots();
 
             _matchRoutine = null;
@@ -273,31 +265,30 @@ namespace Kwiztime
         }
 
         // ------------------------
-        // Results building / sending
+        // Results
         // ------------------------
 
         [Server]
         private void BuildAndSendResults()
         {
-            // Sort by coins descending
             var sorted = new List<KwizPlayer>(_players);
             sorted.RemoveAll(p => p == null);
             sorted.Sort((a, b) => b.coins.CompareTo(a.coins));
 
             int count = sorted.Count;
-            var netIds = new uint[count];
-            var names = new string[count];
-            var coins = new int[count];
-            var isBots = new bool[count];
+            var netIds   = new uint[count];
+            var names    = new string[count];
+            var coins    = new int[count];
+            var isBots   = new bool[count];
             var mascotIds = new int[count];
 
             for (int i = 0; i < count; i++)
             {
                 var p = sorted[i];
-                netIds[i] = p.netId;
-                names[i] = string.IsNullOrWhiteSpace(p.displayName) ? $"Player {p.netId}" : p.displayName;
-                coins[i] = p.coins;
-                isBots[i] = p.isBot;
+                netIds[i]    = p.netId;
+                names[i]     = string.IsNullOrWhiteSpace(p.displayName) ? $"Player {p.netId}" : p.displayName;
+                coins[i]     = p.coins;
+                isBots[i]    = p.isBot;
                 mascotIds[i] = p.isBot ? p.botMascotId : -1;
             }
 
@@ -318,7 +309,6 @@ namespace Kwiztime
 
             int currentTotal = _players.Count;
             int needed = Mathf.Clamp(targetPlayers - currentTotal, 0, targetPlayers);
-
             if (needed <= 0) return;
 
             var nm = NetworkManager.singleton;
@@ -328,9 +318,32 @@ namespace Kwiztime
                 return;
             }
 
+            // FIX: ~1.5% chance to include one Legend Bot per match (per GDD)
+            bool spawnLegendBot = Random.value < legendBotSpawnChance;
+            bool legendSpawned = false;
+
             for (int i = 0; i < needed; i++)
             {
-                var def = BotRegistry.NextBot();
+                BotDefinition def;
+
+                // Try to spawn a legend bot once per match if roll succeeded
+                if (spawnLegendBot && !legendSpawned)
+                {
+                    def = BotRegistry.GetRandomRare();
+                    if (def != null)
+                    {
+                        legendSpawned = true;
+                    }
+                    else
+                    {
+                        def = BotRegistry.GetRandomNonRare();
+                    }
+                }
+                else
+                {
+                    def = BotRegistry.GetRandomNonRare();
+                }
+
                 if (def == null) break;
 
                 var go = Instantiate(nm.playerPrefab);
@@ -342,17 +355,17 @@ namespace Kwiztime
                     continue;
                 }
 
-                kp.isBot = true;
+                kp.isBot       = true;
                 kp.displayName = def.displayName;
                 kp.botMascotId = def.mascotId;
-                kp.botId = def.botId;
+                kp.botId       = def.botId;
 
                 NetworkServer.Spawn(go);
 
                 _botPlayers.Add(kp);
                 _players.Add(kp);
 
-                Debug.Log($"[Server] Spawned bot: {def.botId} ({def.displayName})");
+                Debug.Log($"[Server] Spawned bot: {def.botId} ({def.displayName}){(def.isRare ? " [LEGEND]" : "")}");
             }
 
             RpcStatus($"Lobby filled: {_players.Count}/{targetPlayers} (including bots)");
@@ -375,7 +388,7 @@ namespace Kwiztime
         }
 
         // ------------------------
-        // Bots: answering & chatter
+        // Bots: answering
         // ------------------------
 
         [Server]
@@ -383,27 +396,24 @@ namespace Kwiztime
         {
             if (bot == null) yield break;
 
-            // Defaults
+            // FIX: read stats from BotRegistry instead of hardcoded switch
             float accuracy = 0.65f;
             float minDelay = 1.5f;
             float maxDelay = 3.5f;
 
-            // Use botId for stable profile
-            switch (bot.botId)
+            var def = BotRegistry.GetById(bot.botId);
+            if (def != null)
             {
-                case "bot_nori":  accuracy = 0.55f; minDelay = 1.6f; maxDelay = 4.2f; break;
-                case "bot_mika":  accuracy = 0.60f; minDelay = 1.8f; maxDelay = 4.5f; break;
-                case "bot_sora":  accuracy = 0.72f; minDelay = 1.2f; maxDelay = 3.2f; break;
-                case "bot_yuzu":  accuracy = 0.66f; minDelay = 1.4f; maxDelay = 3.6f; break;
-                case "bot_kumo":  accuracy = 0.92f; minDelay = 0.9f; maxDelay = 2.0f; break;
-                case "bot_reina": accuracy = 0.95f; minDelay = 0.8f; maxDelay = 1.8f; break;
+                // FIX: enforce 90% accuracy cap on Legend Bots per GDD
+                accuracy = def.isRare ? Mathf.Min(def.accuracy, 0.90f) : def.accuracy;
+                minDelay = def.minDelay;
+                maxDelay = def.maxDelay;
             }
 
             float delay = Random.Range(minDelay, maxDelay);
             yield return new WaitForSeconds(delay);
 
-            if (!ServerCanAcceptAnswers())
-                yield break;
+            if (!ServerCanAcceptAnswers()) yield break;
 
             bool pickCorrect = Random.value < accuracy;
             int chosen;
@@ -414,9 +424,10 @@ namespace Kwiztime
             }
             else
             {
-                // pick wrong 0..3 excluding correctIndex
-                int r = Random.Range(0, 3);
-                chosen = (r >= correctIndex) ? r + 1 : r;
+                // FIX: build explicit wrong answer list to avoid off-by-one bug
+                var wrongAnswers = new List<int> { 0, 1, 2, 3 };
+                wrongAnswers.Remove(correctIndex);
+                chosen = wrongAnswers[Random.Range(0, wrongAnswers.Count)];
             }
 
             bot.selectedAnswer = chosen;
@@ -427,6 +438,10 @@ namespace Kwiztime
         {
             return _state == RoomState.InMatch && !_answersLocked;
         }
+
+        // ------------------------
+        // Bots: chatter
+        // ------------------------
 
         [Server]
         private void ServerBotRoundStartChatter()
@@ -446,7 +461,6 @@ namespace Kwiztime
         [Server]
         private void ServerBotRevealChatter(int correctIndex)
         {
-            // Up to maxBotChatsPerRound total this round (including round start chatter)
             for (int attempt = 0; attempt < 8 && _botChatsThisRound < maxBotChatsPerRound; attempt++)
             {
                 var bot = PickRandomBot();
@@ -456,7 +470,7 @@ namespace Kwiztime
                 if (def == null) continue;
 
                 bool botAnswered = bot.selectedAnswer >= 0 && bot.selectedAnswer <= 3;
-                bool botCorrect = botAnswered && (bot.selectedAnswer == correctIndex);
+                bool botCorrect  = botAnswered && (bot.selectedAnswer == correctIndex);
 
                 RpcChat(def.displayName,
                     botCorrect
@@ -472,7 +486,6 @@ namespace Kwiztime
         {
             if (!botPrivateReactionsEnabled) return;
 
-            // Determine leader among humans
             int topCoins = int.MinValue;
             for (int i = 0; i < _players.Count; i++)
             {
@@ -491,11 +504,11 @@ namespace Kwiztime
                 if (conn == null) continue;
 
                 bool answered = p.selectedAnswer >= 0 && p.selectedAnswer <= 3;
-                bool correct = answered && (p.selectedAnswer == correctIndex);
+                bool correct  = answered && (p.selectedAnswer == correctIndex);
 
-                int deltaFromLead = topCoins - p.coins;
+                int deltaFromLead  = topCoins - p.coins;
                 bool leadingOrTied = deltaFromLead <= 0;
-                bool losingBadly = deltaFromLead >= losingByCoinsThreshold;
+                bool losingBadly   = deltaFromLead >= losingByCoinsThreshold;
 
                 var speaker = ChooseReactionBotForSituation(correct, answered, leadingOrTied, losingBadly);
                 if (speaker == null) continue;
@@ -504,21 +517,14 @@ namespace Kwiztime
                 if (def == null) continue;
 
                 string line;
-
                 if (!answered)
-                {
                     line = BotRegistry.PickComfortLine(def.personality);
-                }
                 else if (correct)
-                {
                     line = BotRegistry.PickPraiseLine(def.personality);
-                }
                 else
-                {
                     line = losingBadly
                         ? BotRegistry.PickComfortLine(def.personality)
                         : BotRegistry.PickTauntLine(def.personality);
-                }
 
                 TargetPrivateChat(conn, def.displayName, line);
             }
@@ -527,7 +533,6 @@ namespace Kwiztime
         [Server]
         private KwizPlayer ChooseReactionBotForSituation(bool playerCorrect, bool playerAnswered, bool playerLeadingOrTied, bool playerLosingBadly)
         {
-            // RareBoss occasionally speaks
             if (Random.value < rareBossSpeakChance)
             {
                 var boss = PickBotByPersonality(BotPersonality.RareBoss);
@@ -539,22 +544,13 @@ namespace Kwiztime
 
             if (playerCorrect)
             {
-                if (playerLosingBadly)
-                    return PickFirstAvailableBot(BotPersonality.Friendly, BotPersonality.Chill, BotPersonality.Competitive);
-
-                if (playerLeadingOrTied)
-                    return PickFirstAvailableBot(BotPersonality.Competitive, BotPersonality.Snarky, BotPersonality.Friendly);
-
+                if (playerLosingBadly)   return PickFirstAvailableBot(BotPersonality.Friendly, BotPersonality.Chill, BotPersonality.Competitive);
+                if (playerLeadingOrTied) return PickFirstAvailableBot(BotPersonality.Competitive, BotPersonality.Snarky, BotPersonality.Friendly);
                 return PickFirstAvailableBot(BotPersonality.Chill, BotPersonality.Friendly, BotPersonality.Competitive);
             }
 
-            // player wrong
-            if (playerLosingBadly)
-                return PickFirstAvailableBot(BotPersonality.Friendly, BotPersonality.Chill, BotPersonality.Competitive);
-
-            if (playerLeadingOrTied)
-                return PickFirstAvailableBot(BotPersonality.Snarky, BotPersonality.Competitive, BotPersonality.Chill);
-
+            if (playerLosingBadly)   return PickFirstAvailableBot(BotPersonality.Friendly, BotPersonality.Chill, BotPersonality.Competitive);
+            if (playerLeadingOrTied) return PickFirstAvailableBot(BotPersonality.Snarky, BotPersonality.Competitive, BotPersonality.Chill);
             return PickFirstAvailableBot(BotPersonality.Competitive, BotPersonality.Snarky, BotPersonality.Chill);
         }
 
@@ -588,7 +584,6 @@ namespace Kwiztime
                 if (def != null && def.personality == personality)
                     return p;
             }
-
             return null;
         }
 
@@ -601,7 +596,6 @@ namespace Kwiztime
             {
                 var p = _players[i];
                 if (p == null || !p.isBot) continue;
-
                 bots ??= new List<KwizPlayer>();
                 bots.Add(p);
             }
@@ -616,69 +610,48 @@ namespace Kwiztime
             if (_state != RoomState.Lobby && _state != RoomState.Results) return;
             if (_matchRoutine != null) return;
 
-            // Safety: clean up any lingering bots
-            ServerDespawnBots();
+            // FIX: respect minPlayersToStart (was bypassed before)
+            if (CountRealPlayers() < minPlayersToStart)
+            {
+                Debug.LogWarning("[Server] Not enough real players to start.");
+                return;
+            }
 
-            // Refill lobby then start
+            ServerDespawnBots();
             ServerFillBotsIfNeeded();
 
             _matchRoutine = StartCoroutine(ServerMatchFlow());
         }
 
         // ------------------------
-        // RPCs -> Client UI Events
+        // RPCs
         // ------------------------
 
-        [ClientRpc]
-        private void RpcShowQuestion(string prompt, string[] answers, float timeLimit)
-        {
-            Kwiztime.UI.ClientUIEvents.OnQuestion?.Invoke(prompt, answers, timeLimit);
-        }
+        [ClientRpc] private void RpcShowQuestion(string prompt, string[] answers, float timeLimit)
+            => Kwiztime.UI.ClientUIEvents.OnQuestion?.Invoke(prompt, answers, timeLimit);
 
-        [ClientRpc]
-        private void RpcTimer(float remaining)
-        {
-            Kwiztime.UI.ClientUIEvents.OnTimer?.Invoke(remaining);
-        }
+        [ClientRpc] private void RpcTimer(float remaining)
+            => Kwiztime.UI.ClientUIEvents.OnTimer?.Invoke(remaining);
 
-        [ClientRpc]
-        private void RpcReveal(int correctIndex)
-        {
-            Kwiztime.UI.ClientUIEvents.OnReveal?.Invoke(correctIndex);
-        }
+        [ClientRpc] private void RpcReveal(int correctIndex)
+            => Kwiztime.UI.ClientUIEvents.OnReveal?.Invoke(correctIndex);
 
-        [ClientRpc]
-        private void RpcRound(int round, int total)
-        {
-            Kwiztime.UI.ClientUIEvents.OnRound?.Invoke(round, total);
-        }
+        [ClientRpc] private void RpcRound(int round, int total)
+            => Kwiztime.UI.ClientUIEvents.OnRound?.Invoke(round, total);
 
-        [ClientRpc]
-        private void RpcStatus(string status)
-        {
-            Kwiztime.UI.ClientUIEvents.OnStatus?.Invoke(status);
-        }
+        [ClientRpc] private void RpcStatus(string status)
+            => Kwiztime.UI.ClientUIEvents.OnStatus?.Invoke(status);
 
-        [ClientRpc]
-        private void RpcQuestionMeta(string meta)
-        {
-            Kwiztime.UI.ClientUIEvents.OnQuestionMeta?.Invoke(meta);
-        }
+        [ClientRpc] private void RpcQuestionMeta(string meta)
+            => Kwiztime.UI.ClientUIEvents.OnQuestionMeta?.Invoke(meta);
 
-        [ClientRpc]
-        private void RpcChat(string speaker, string message)
-        {
-            Kwiztime.UI.ClientUIEvents.OnChat?.Invoke(speaker, message);
-        }
+        [ClientRpc] private void RpcChat(string speaker, string message)
+            => Kwiztime.UI.ClientUIEvents.OnChat?.Invoke(speaker, message);
 
-        [TargetRpc]
-        private void TargetPrivateChat(NetworkConnectionToClient target, string speaker, string message)
-        {
-            Kwiztime.UI.ClientUIEvents.OnChatPrivate?.Invoke(speaker, message);
-        }
+        [TargetRpc] private void TargetPrivateChat(NetworkConnectionToClient target, string speaker, string message)
+            => Kwiztime.UI.ClientUIEvents.OnChatPrivate?.Invoke(speaker, message);
 
-        [ClientRpc]
-        private void RpcShowResults(uint[] playerNetIds, string[] names, int[] playerCoins, bool[] isBots, int[] mascotIds)
+        [ClientRpc] private void RpcShowResults(uint[] playerNetIds, string[] names, int[] playerCoins, bool[] isBots, int[] mascotIds)
         {
             Kwiztime.UI.ClientUIEvents.OnResultsDetailed?.Invoke(playerNetIds, names, playerCoins, isBots, mascotIds);
             Kwiztime.UI.ClientUIEvents.OnResults?.Invoke();

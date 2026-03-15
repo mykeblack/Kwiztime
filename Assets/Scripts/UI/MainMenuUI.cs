@@ -16,8 +16,8 @@ namespace Kwiztime.UI
         [SerializeField] private Button playOnlineButton;
         [SerializeField] private Button privateRoomButton;
         [SerializeField] private Button customiseButton;
-        [SerializeField] private Button shopButton;
         [SerializeField] private Button optionsButton;
+        [SerializeField] private Button characterCreatorButton; // your new button
         [SerializeField] private Button quitButton;
 
         [Header("Private Room Modal")]
@@ -33,46 +33,61 @@ namespace Kwiztime.UI
         [SerializeField] private Button closeOptionsModalButton;
 
         [Header("Scene Names")]
-        [SerializeField] private string gameSceneName = "Game";
-        [SerializeField] private string customiseSceneName = "Customise";
-        [SerializeField] private string shopSceneName = "Shop";
+        [SerializeField] private string gameSceneName      = "Game";
+        [SerializeField] private string customiseSceneName = "Customisation"; // FIX: unified spelling
 
         private void Awake()
         {
-            // Set default copy (safe if texts are not assigned)
-            if (titleText != null) titleText.text = "Kwiztime";
-            if (subtitleText != null) subtitleText.text = "A soft party quiz for everyone";
-            if (footerText != null) footerText.text = "Bots may join if lobbies aren’t full. Legend bots are rare and award bonus coins. ⭐";
+            // FIX: avatar check moved to Awake first, before any wiring, with early return
+            if (PlayerPrefs.GetInt("avatar_created", 0) == 0)
+            {
+                SceneManager.LoadScene("CharacterCreation");
+                return;
+            }
 
-            // Ensure modals are closed on load
-            if (privateRoomModal != null) privateRoomModal.SetActive(false);
-            if (optionsModal != null) optionsModal.SetActive(false);
-
-            // Main buttons
-            if (playOnlineButton != null) playOnlineButton.onClick.AddListener(OnPlayOnline);
-            if (privateRoomButton != null) privateRoomButton.onClick.AddListener(OpenPrivateRoomModal);
-            if (customiseButton != null) customiseButton.onClick.AddListener(OnCustomise);
-            if (shopButton != null) shopButton.onClick.AddListener(OnShop);
-            if (optionsButton != null) optionsButton.onClick.AddListener(OpenOptions);
-            if (quitButton != null) quitButton.onClick.AddListener(OnQuit);
-
-            // Private modal buttons
-            if (closePrivateModalButton != null) closePrivateModalButton.onClick.AddListener(ClosePrivateRoomModal);
-            if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinPrivateRoom);
-            if (createRoomButton != null) createRoomButton.onClick.AddListener(OnCreatePrivateRoom);
-
-            // Options modal
-            if (closeOptionsModalButton != null) closeOptionsModalButton.onClick.AddListener(CloseOptions);
+            SetupText();
+            CloseAllModals();
+            WireButtons();
 
 #if UNITY_WEBGL
-            // Quit does nothing in WebGL builds; hide the button.
             if (quitButton != null) quitButton.gameObject.SetActive(false);
 #endif
         }
 
+        // FIX: Start() removed entirely — avatar check now lives in Awake
+
+        private void SetupText()
+        {
+            if (titleText    != null) titleText.text    = "Kwiztime";
+            if (subtitleText != null) subtitleText.text = "A soft party quiz for everyone";
+            if (footerText != null) footerText.text = "Bots may join if lobbies aren't full. Legend bots are rare and award bonus coins. <sprite name=\"icon_coin\">";
+        }
+
+        private void CloseAllModals()
+        {
+            if (privateRoomModal != null) privateRoomModal.SetActive(false);
+            if (optionsModal     != null) optionsModal.SetActive(false);
+        }
+
+        private void WireButtons()
+        {
+            if (playOnlineButton       != null) playOnlineButton.onClick.AddListener(OnPlayOnline);
+            if (privateRoomButton      != null) privateRoomButton.onClick.AddListener(OpenPrivateRoomModal);
+            if (customiseButton        != null) customiseButton.onClick.AddListener(OnCustomise);
+            if (optionsButton          != null) optionsButton.onClick.AddListener(OpenOptions);
+            if (characterCreatorButton != null) characterCreatorButton.onClick.AddListener(OpenCharacterCreator);
+            if (quitButton             != null) quitButton.onClick.AddListener(OnQuit);
+
+            if (closePrivateModalButton != null) closePrivateModalButton.onClick.AddListener(ClosePrivateRoomModal);
+            if (joinRoomButton          != null) joinRoomButton.onClick.AddListener(OnJoinPrivateRoom);
+            if (createRoomButton        != null) createRoomButton.onClick.AddListener(OnCreatePrivateRoom);
+
+            if (closeOptionsModalButton != null) closeOptionsModalButton.onClick.AddListener(CloseOptions);
+        }
+
         private void OnPlayOnline()
         {
-            Debug.Log("[MainMenu] Play Online (public matchmaking).");
+            Debug.Log("[MainMenu] Play Online.");
             SceneManager.LoadScene(gameSceneName);
         }
 
@@ -102,14 +117,11 @@ namespace Kwiztime.UI
         {
             if (roomCodeInput == null) return;
 
-            string upper = (raw ?? "").ToUpperInvariant();
             System.Text.StringBuilder sb = new System.Text.StringBuilder(6);
-
-            foreach (char c in upper)
+            foreach (char c in (raw ?? "").ToUpperInvariant())
             {
                 if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
                     sb.Append(c);
-
                 if (sb.Length >= 6) break;
             }
 
@@ -127,32 +139,33 @@ namespace Kwiztime.UI
 
             if (code.Length != 6)
             {
-                if (privateRoomHintText != null) privateRoomHintText.text = "Room code must be 6 letters/numbers.";
+                if (privateRoomHintText != null)
+                    privateRoomHintText.text = "Room code must be 6 letters/numbers.";
                 return;
             }
 
-            Debug.Log($"[MainMenu] Join private room: {code}");
-            // Hook later: call Master Server to resolve code -> game server address
-            SceneManager.LoadScene(gameSceneName);
+            // FIX: show coming soon instead of silently loading game scene
+            if (privateRoomHintText != null)
+                privateRoomHintText.text = "Private rooms coming soon!";
+
+            Debug.Log($"[MainMenu] Join private room stub: {code}");
+            // Hook later: resolve code -> server address via master server
         }
 
         private void OnCreatePrivateRoom()
         {
-            Debug.Log("[MainMenu] Create private room.");
-            // Hook later: call Master Server to create room -> get code + server address
-            SceneManager.LoadScene(gameSceneName);
+            // FIX: show coming soon instead of silently loading game scene
+            if (privateRoomHintText != null)
+                privateRoomHintText.text = "Private rooms coming soon!";
+
+            Debug.Log("[MainMenu] Create private room stub.");
+            // Hook later: create room via master server -> get code + address
         }
 
         private void OnCustomise()
         {
             Debug.Log("[MainMenu] Customise.");
             TryLoadOrWarn(customiseSceneName);
-        }
-
-        private void OnShop()
-        {
-            Debug.Log("[MainMenu] Shop.");
-            TryLoadOrWarn(shopSceneName);
         }
 
         private void OpenOptions()
@@ -166,6 +179,11 @@ namespace Kwiztime.UI
             if (optionsModal != null) optionsModal.SetActive(false);
         }
 
+        public void OpenCharacterCreator()
+        {
+            SceneManager.LoadScene("CharacterCreation");
+        }
+
         private void OnQuit()
         {
             Debug.Log("[MainMenu] Quit.");
@@ -174,23 +192,19 @@ namespace Kwiztime.UI
 
         private void TryLoadOrWarn(string sceneName)
         {
-            if (string.IsNullOrWhiteSpace(sceneName))
-                return;
+            if (string.IsNullOrWhiteSpace(sceneName)) return;
 
-            // Avoid hard errors early if scenes aren't added yet
+            // FIX: log actual exception instead of swallowing silently
             try
             {
                 SceneManager.LoadScene(sceneName);
             }
-            catch
+            catch (System.Exception e)
             {
-                Debug.LogWarning($"[MainMenu] Scene '{sceneName}' is not in Build Settings yet.");
+                Debug.LogWarning($"[MainMenu] Could not load '{sceneName}': {e.Message}");
             }
         }
 
-        public void OpenCustomisation()
-        {
-            UnityEngine.SceneManagement.SceneManager.LoadScene("Customisation");
-        }
+        // FIX: removed duplicate OpenCustomisation() method with conflicting scene name spelling
     }
 }

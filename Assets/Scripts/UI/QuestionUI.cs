@@ -15,23 +15,23 @@ namespace Kwiztime.UI
         [SerializeField] private TMP_Text metaText;
 
         [Header("Answer Buttons")]
-        [SerializeField] private Button[] answerButtons;      // size 4
-        [SerializeField] private TMP_Text[] answerLabels;     // size 4
+        [SerializeField] private Button[] answerButtons;
+        [SerializeField] private TMP_Text[] answerLabels;
 
         [Header("Answer Visuals")]
-        [SerializeField] private Outline[] outlines;          // size 4 (optional)
-        [SerializeField] private OutlinePulse[] pulses;       // size 4 (optional)
-        [SerializeField] private ScaleBounce[] scaleBounces;  // size 4 (optional)
+        [SerializeField] private Outline[] outlines;
+        [SerializeField] private OutlinePulse[] pulses;
+        [SerializeField] private ScaleBounce[] scaleBounces;
 
         [Header("Stamp Icons")]
-        [SerializeField] private Image[] stampIcons;          // size 4 (optional)
+        [SerializeField] private Image[] stampIcons;
         [SerializeField] private Sprite correctStampSprite;
         [SerializeField] private Sprite wrongStampSprite;
 
         [Header("Results UI")]
         [SerializeField] private GameObject resultsPanel;
-        [SerializeField] private Transform resultsContent;     // ScrollView/Viewport/Content
-        [SerializeField] private GameObject resultsRowPrefab;  // PF_ResultsRow
+        [SerializeField] private Transform resultsContent;
+        [SerializeField] private GameObject resultsRowPrefab;
 
         [Header("Outline Colors")]
         [SerializeField] private Color selectedOutlineColor = new Color(0.3f, 0.6f, 1f, 1f);
@@ -46,12 +46,9 @@ namespace Kwiztime.UI
         private int _correctIndex = -1;
         private readonly string[] _baseAnswers = new string[4];
 
-        // ----------------------------------------------------
-
         private void Awake()
         {
             AutoWireArraysSafe();
-
             ClearAllAnswerVisuals();
 
             if (resultsPanel != null)
@@ -69,43 +66,36 @@ namespace Kwiztime.UI
 
         private void OnEnable()
         {
-            ClientUIEvents.OnQuestion += HandleQuestion;
-            ClientUIEvents.OnTimer += HandleTimer;
-            ClientUIEvents.OnReveal += HandleReveal;
-
-            ClientUIEvents.OnStatus += HandleStatus;
-            ClientUIEvents.OnRound += HandleRound;
-            ClientUIEvents.OnQuestionMeta += HandleMeta;
-
-            ClientUIEvents.OnResults += HandleResults;
-            ClientUIEvents.OnResultsDetailed += HandleResultsDetailed; // IMPORTANT
+            ClientUIEvents.OnQuestion       += HandleQuestion;
+            ClientUIEvents.OnTimer          += HandleTimer;
+            ClientUIEvents.OnReveal         += HandleReveal;
+            ClientUIEvents.OnStatus         += HandleStatus;
+            ClientUIEvents.OnRound          += HandleRound;
+            ClientUIEvents.OnQuestionMeta   += HandleMeta;
+            ClientUIEvents.OnResults        += HandleResults;
+            ClientUIEvents.OnResultsDetailed += HandleResultsDetailed;
         }
 
         private void OnDisable()
         {
-            ClientUIEvents.OnQuestion -= HandleQuestion;
-            ClientUIEvents.OnTimer -= HandleTimer;
-            ClientUIEvents.OnReveal -= HandleReveal;
-
-            ClientUIEvents.OnStatus -= HandleStatus;
-            ClientUIEvents.OnRound -= HandleRound;
-            ClientUIEvents.OnQuestionMeta -= HandleMeta;
-
-            ClientUIEvents.OnResults -= HandleResults;
-            ClientUIEvents.OnResultsDetailed -= HandleResultsDetailed; // IMPORTANT
+            ClientUIEvents.OnQuestion       -= HandleQuestion;
+            ClientUIEvents.OnTimer          -= HandleTimer;
+            ClientUIEvents.OnReveal         -= HandleReveal;
+            ClientUIEvents.OnStatus         -= HandleStatus;
+            ClientUIEvents.OnRound          -= HandleRound;
+            ClientUIEvents.OnQuestionMeta   -= HandleMeta;
+            ClientUIEvents.OnResults        -= HandleResults;
+            ClientUIEvents.OnResultsDetailed -= HandleResultsDetailed;
         }
 
         private void OnPlayAgainClicked()
         {
-            // Only host/server can start a new match
             if (NetworkServer.active)
             {
-                // server is local (host)
                 KwizRoomManager.Instance.ServerStartMatchFromUI();
             }
             else
             {
-                // client request host to start (works for remote clients too)
                 var local = NetworkClient.localPlayer;
                 if (local == null) return;
 
@@ -117,15 +107,11 @@ namespace Kwiztime.UI
 
         private void OnBackToMenuClicked()
         {
-            // Stop network and return to menu scene
-            // Host: stops host. Client: stops client.
             if (NetworkServer.active && NetworkClient.isConnected)
                 NetworkManager.singleton.StopHost();
             else if (NetworkClient.isConnected)
                 NetworkManager.singleton.StopClient();
 
-            // If your NetworkManager already auto-loads menu scene, you can stop here.
-            // Otherwise load explicitly (make sure the scene is in Build Settings)
             UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
         }
 
@@ -136,7 +122,7 @@ namespace Kwiztime.UI
         private void HandleQuestion(string prompt, string[] answers, float timeLimit)
         {
             _selectedIndex = -1;
-            _correctIndex = -1;
+            _correctIndex  = -1;
 
             if (resultsPanel != null)
                 resultsPanel.SetActive(false);
@@ -176,17 +162,29 @@ namespace Kwiztime.UI
         {
             _correctIndex = correctIndex;
 
+            // FIX: read server-authoritative selected answer from SyncVar
+            // instead of trusting the local _selectedIndex which may be stale
+            // if the server rejected a late submission
+            var local = NetworkClient.localPlayer;
+            if (local != null)
+            {
+                var kp = local.GetComponent<Kwiztime.KwizPlayer>();
+                if (kp != null)
+                    _selectedIndex = kp.selectedAnswer;
+            }
+
             if (answerButtons != null)
             {
                 for (int i = 0; i < answerButtons.Length; i++)
-                    if (answerButtons[i] != null) answerButtons[i].interactable = false;
+                    if (answerButtons[i] != null)
+                        answerButtons[i].interactable = false;
             }
 
             ApplyRevealVisuals();
 
-            if (_selectedIndex == -1) SetStatus("Time's up!");
+            if (_selectedIndex == -1)              SetStatus("Time's up!");
             else if (_selectedIndex == _correctIndex) SetStatus("Correct!");
-            else SetStatus("Wrong!");
+            else                                   SetStatus("Wrong!");
         }
 
         private void Submit(int index)
@@ -208,7 +206,7 @@ namespace Kwiztime.UI
 
         private void HandleResults()
         {
-            // This just ensures panel is visible if the server sends the simple event.
+            // Kept for backwards compatibility but panel is shown in HandleResultsDetailed
             if (resultsPanel != null)
                 resultsPanel.SetActive(true);
         }
@@ -243,14 +241,13 @@ namespace Kwiztime.UI
 
             uint myNetId = (NetworkClient.localPlayer != null) ? NetworkClient.localPlayer.netId : 0;
 
-            // Winner = highest coins (server already sorted, but this handles ties)
             int best = int.MinValue;
             for (int i = 0; i < count; i++)
                 best = Mathf.Max(best, coins[i]);
 
             for (int i = 0; i < count; i++)
             {
-                var row = Instantiate(resultsRowPrefab, resultsContent);
+                var row  = Instantiate(resultsRowPrefab, resultsContent);
                 var view = row.GetComponent<ResultsRowView>();
                 if (view == null)
                 {
@@ -259,8 +256,7 @@ namespace Kwiztime.UI
                 }
 
                 bool isWinner = coins[i] == best;
-                bool isYou = (myNetId != 0 && netIds[i] == myNetId);
-
+                bool isYou    = (myNetId != 0 && netIds[i] == myNetId);
                 string display = string.IsNullOrWhiteSpace(names[i]) ? $"Player {netIds[i]}" : names[i];
 
                 view.Set(display, coins[i], isWinner, isYou, isBots[i], mascotIds[i]);
@@ -270,7 +266,6 @@ namespace Kwiztime.UI
         private void ClearResultsRows()
         {
             if (resultsContent == null) return;
-
             for (int i = resultsContent.childCount - 1; i >= 0; i--)
                 Destroy(resultsContent.GetChild(i).gameObject);
         }
@@ -300,7 +295,7 @@ namespace Kwiztime.UI
         }
 
         // ----------------------------------------------------
-        // Answer visuals (outline + pulse + bounce + stamp sprites)
+        // Answer visuals
         // ----------------------------------------------------
 
         private void ClearAllAnswerVisuals()
@@ -318,7 +313,6 @@ namespace Kwiztime.UI
         private void ApplySelectedVisuals()
         {
             ClearAllAnswerVisuals();
-
             if (_selectedIndex < 0 || _selectedIndex > 3) return;
 
             var outline = outlines != null && outlines.Length > _selectedIndex ? outlines[_selectedIndex] : null;
@@ -333,34 +327,21 @@ namespace Kwiztime.UI
         {
             ClearAllAnswerVisuals();
 
-            // Correct answer: outline + pulse + bounce
             if (_correctIndex >= 0 && _correctIndex <= 3)
             {
                 var o = outlines != null && outlines.Length > _correctIndex ? outlines[_correctIndex] : null;
-                if (o != null)
-                {
-                    o.effectColor = correctOutlineColor;
-                    o.enabled = true;
-                }
+                if (o != null) { o.effectColor = correctOutlineColor; o.enabled = true; }
 
-                var p = pulses != null && pulses.Length > _correctIndex ? pulses[_correctIndex] : null;
-                p?.Play();
-
-                var b = scaleBounces != null && scaleBounces.Length > _correctIndex ? scaleBounces[_correctIndex] : null;
-                b?.Play();
+                pulses?[_correctIndex]?.Play();
+                scaleBounces?[_correctIndex]?.Play();
             }
 
-            // Selected answer: outline + stamp sprite
             if (_selectedIndex >= 0 && _selectedIndex <= 3)
             {
                 bool isCorrect = _selectedIndex == _correctIndex;
 
                 var o = outlines != null && outlines.Length > _selectedIndex ? outlines[_selectedIndex] : null;
-                if (o != null)
-                {
-                    o.effectColor = isCorrect ? correctOutlineColor : wrongOutlineColor;
-                    o.enabled = true;
-                }
+                if (o != null) { o.effectColor = isCorrect ? correctOutlineColor : wrongOutlineColor; o.enabled = true; }
 
                 var icon = stampIcons != null && stampIcons.Length > _selectedIndex ? stampIcons[_selectedIndex] : null;
                 if (icon != null)
@@ -378,31 +359,28 @@ namespace Kwiztime.UI
 
         private void AutoWireArraysSafe()
         {
-            // Require answerButtons set up in Inspector
             if (answerButtons == null || answerButtons.Length != 4)
             {
                 Debug.LogError("[QuestionUI] answerButtons must be size 4 in Inspector.");
                 return;
             }
 
-            // Ensure optional arrays exist at length 4
-            outlines = EnsureArray(outlines);
-            pulses = EnsureArray(pulses);
+            outlines     = EnsureArray(outlines);
+            pulses       = EnsureArray(pulses);
             scaleBounces = EnsureArray(scaleBounces);
-            stampIcons = EnsureArray(stampIcons);
+            stampIcons   = EnsureArray(stampIcons);
 
             for (int i = 0; i < 4; i++)
             {
                 var btn = answerButtons[i];
                 if (btn == null) continue;
 
-                if (outlines[i] == null) outlines[i] = btn.GetComponent<Outline>();
-                if (pulses[i] == null) pulses[i] = btn.GetComponent<OutlinePulse>();
+                if (outlines[i]     == null) outlines[i]     = btn.GetComponent<Outline>();
+                if (pulses[i]       == null) pulses[i]       = btn.GetComponent<OutlinePulse>();
                 if (scaleBounces[i] == null) scaleBounces[i] = btn.GetComponent<ScaleBounce>();
 
                 if (stampIcons[i] == null)
                 {
-                    // Find StampIcon anywhere under the button
                     var t = FindChildRecursive(btn.transform, "StampIcon");
                     if (t != null) stampIcons[i] = t.GetComponent<Image>();
                 }

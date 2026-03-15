@@ -20,8 +20,8 @@ namespace Kwiztime.UI
         [SerializeField] private Button bodyNextButton;
 
         [Header("Skin Tone Swatches (6)")]
-        [SerializeField] private Button[] skinSwatchButtons; // size 6
-        [SerializeField] private Image[] skinSwatchImages;   // size 6
+        [SerializeField] private Button[] skinSwatchButtons;
+        [SerializeField] private Image[] skinSwatchImages;
 
         [Header("Face")]
         [SerializeField] private TMP_Text hairLabel;
@@ -76,6 +76,7 @@ namespace Kwiztime.UI
 
         private PlayerCosmetics current;
 
+
         private readonly string[] bodyNames = { "Regular", "Athletic", "Muscly", "Curvy", "Chunky", "Slinky" };
 
         private void Awake()
@@ -88,11 +89,9 @@ namespace Kwiztime.UI
 
         private void WireButtons()
         {
-            // Body
             bodyPrevButton?.onClick.AddListener(() => { current.bodyShapeId = Wrap(current.bodyShapeId - 1, 6); RefreshAll(); });
             bodyNextButton?.onClick.AddListener(() => { current.bodyShapeId = Wrap(current.bodyShapeId + 1, 6); RefreshAll(); });
 
-            // Face
             hairPrevButton?.onClick.AddListener(() => { current.hairId = Wrap(current.hairId - 1, Len(cosmeticsDb?.hairs)); RefreshAll(); });
             hairNextButton?.onClick.AddListener(() => { current.hairId = Wrap(current.hairId + 1, Len(cosmeticsDb?.hairs)); RefreshAll(); });
 
@@ -102,7 +101,6 @@ namespace Kwiztime.UI
             mouthPrevButton?.onClick.AddListener(() => { current.mouthId = Wrap(current.mouthId - 1, Len(cosmeticsDb?.mouths)); RefreshAll(); });
             mouthNextButton?.onClick.AddListener(() => { current.mouthId = Wrap(current.mouthId + 1, Len(cosmeticsDb?.mouths)); RefreshAll(); });
 
-            // Outfits (these can be -1 meaning none)
             hatPrevButton?.onClick.AddListener(() => { current.hatId = WrapMinusOne(current.hatId - 1, Len(cosmeticsDb?.hats)); RefreshAll(); });
             hatNextButton?.onClick.AddListener(() => { current.hatId = WrapMinusOne(current.hatId + 1, Len(cosmeticsDb?.hats)); RefreshAll(); });
 
@@ -118,7 +116,6 @@ namespace Kwiztime.UI
             shoesPrevButton?.onClick.AddListener(() => { current.shoesId = WrapMinusOne(current.shoesId - 1, Len(cosmeticsDb?.shoes)); RefreshAll(); });
             shoesNextButton?.onClick.AddListener(() => { current.shoesId = WrapMinusOne(current.shoesId + 1, Len(cosmeticsDb?.shoes)); RefreshAll(); });
 
-            // Accessories
             accAPrevButton?.onClick.AddListener(() => { current.accessoryAId = WrapMinusOne(current.accessoryAId - 1, Len(cosmeticsDb?.accessories)); RefreshAll(); });
             accANextButton?.onClick.AddListener(() => { current.accessoryAId = WrapMinusOne(current.accessoryAId + 1, Len(cosmeticsDb?.accessories)); RefreshAll(); });
 
@@ -128,95 +125,112 @@ namespace Kwiztime.UI
             accCPrevButton?.onClick.AddListener(() => { current.accessoryCId = WrapMinusOne(current.accessoryCId - 1, Len(cosmeticsDb?.accessories)); RefreshAll(); });
             accCNextButton?.onClick.AddListener(() => { current.accessoryCId = WrapMinusOne(current.accessoryCId + 1, Len(cosmeticsDb?.accessories)); RefreshAll(); });
 
-            // Save / Back
             saveButton?.onClick.AddListener(SaveToPlayer);
             backButton?.onClick.AddListener(BackToMenu);
         }
 
         private void SetupSkinSwatches()
         {
-            if (skinToneDb == null || skinToneDb.skinTones == null) return;
+            if (skinToneDb == null || skinToneDb.skinTones == null || skinToneDb.skinTones.Length == 0)
+            {
+                Debug.LogWarning("[CustomisationUI] SkinToneDatabase missing or empty.");
+                return;
+            }
 
-            int n = Mathf.Min(6, skinToneDb.skinTones.Length);
+            if (skinSwatchButtons == null || skinSwatchButtons.Length == 0)
+            {
+                Debug.LogWarning("[CustomisationUI] skinSwatchButtons not assigned.");
+                return;
+            }
+
+            if (skinSwatchImages == null || skinSwatchImages.Length != skinSwatchButtons.Length)
+            {
+                Debug.LogWarning($"[CustomisationUI] skinSwatchImages length ({skinSwatchImages?.Length ?? 0}) " +
+                                 $"does not match skinSwatchButtons ({skinSwatchButtons.Length}).");
+            }
+
+            int count = Mathf.Min(skinSwatchButtons.Length, skinToneDb.skinTones.Length);
 
             for (int i = 0; i < skinSwatchButtons.Length; i++)
             {
-                int idx = i;
+                if (skinSwatchButtons[i] == null) continue;
 
-                if (skinSwatchImages != null && i < skinSwatchImages.Length && skinSwatchImages[i] != null)
-                    skinSwatchImages[i].color = (i < n) ? skinToneDb.skinTones[i] : Color.black;
+                bool active = i < count;
+                skinSwatchButtons[i].gameObject.SetActive(active);
+                if (!active) continue;
 
-                if (skinSwatchButtons[i] != null)
+                int index = i;
+
+                if (skinSwatchImages != null && index < skinSwatchImages.Length && skinSwatchImages[index] != null)
                 {
-                    skinSwatchButtons[i].onClick.RemoveAllListeners();
-
-                    if (i < n)
-                        skinSwatchButtons[i].onClick.AddListener(() => { current.skinToneId = idx; RefreshAll(); });
-                    else
-                        skinSwatchButtons[i].interactable = false;
+                    var col = skinToneDb.skinTones[index];
+                    col.a = 1f;
+                    skinSwatchImages[index].color = col;
                 }
+
+                skinSwatchButtons[index].onClick.RemoveAllListeners();
+                skinSwatchButtons[index].onClick.AddListener(() =>
+                {
+                    current.skinToneId = index;
+                    RefreshAll();
+                });
             }
+
+            Debug.Log($"[CustomisationUI] Skin swatches wired: {count}/{skinSwatchButtons.Length}");
         }
 
         private void RefreshAll()
         {
-            // Labels
             if (bodyShapeLabel != null)
                 bodyShapeLabel.text = bodyNames[Mathf.Clamp(current.bodyShapeId, 0, bodyNames.Length - 1)];
 
-            SetLabel(hairLabel, "Hair", current.hairId, Len(cosmeticsDb?.hairs));
-            SetLabel(eyesLabel, "Eyes", current.eyesId, Len(cosmeticsDb?.eyes));
-            SetLabel(mouthLabel, "Mouth", current.mouthId, Len(cosmeticsDb?.mouths));
+            SetLabel(hairLabel,        "Hair",    current.hairId,        Len(cosmeticsDb?.hairs));
+            SetLabel(eyesLabel,        "Eyes",    current.eyesId,        Len(cosmeticsDb?.eyes));
+            SetLabel(mouthLabel,       "Mouth",   current.mouthId,       Len(cosmeticsDb?.mouths));
+            SetLabel(hatLabel,         "Hat",     current.hatId,         Len(cosmeticsDb?.hats),        allowNone: true);
+            SetLabel(topLabel,         "Top",     current.topId,         Len(cosmeticsDb?.tops));
+            SetLabel(legwearLabel,     "Legwear", current.legwearId,     Len(cosmeticsDb?.legwear));
+            SetLabel(wholeOutfitLabel, "Whole",   current.wholeOutfitId, Len(cosmeticsDb?.wholeOutfits), allowNone: true);
+            SetLabel(shoesLabel,       "Shoes",   current.shoesId,       Len(cosmeticsDb?.shoes),        allowNone: true);
+            SetLabel(accALabel,        "Acc A",   current.accessoryAId,  Len(cosmeticsDb?.accessories),  allowNone: true);
+            SetLabel(accBLabel,        "Acc B",   current.accessoryBId,  Len(cosmeticsDb?.accessories),  allowNone: true);
+            SetLabel(accCLabel,        "Acc C",   current.accessoryCId,  Len(cosmeticsDb?.accessories),  allowNone: true);
 
-            SetLabel(hatLabel, "Hat", current.hatId, Len(cosmeticsDb?.hats), allowNone: true);
-            SetLabel(topLabel, "Top", current.topId, Len(cosmeticsDb?.tops));
-            SetLabel(legwearLabel, "Legwear", current.legwearId, Len(cosmeticsDb?.legwear));
-            SetLabel(wholeOutfitLabel, "Whole", current.wholeOutfitId, Len(cosmeticsDb?.wholeOutfits), allowNone: true);
-            SetLabel(shoesLabel, "Shoes", current.shoesId, Len(cosmeticsDb?.shoes), allowNone: true);
-
-            SetLabel(accALabel, "Acc A", current.accessoryAId, Len(cosmeticsDb?.accessories), allowNone: true);
-            SetLabel(accBLabel, "Acc B", current.accessoryBId, Len(cosmeticsDb?.accessories), allowNone: true);
-            SetLabel(accCLabel, "Acc C", current.accessoryCId, Len(cosmeticsDb?.accessories), allowNone: true);
-
-            // Preview
             if (preview != null)
                 preview.Apply(current);
         }
 
         private void SaveToPlayer()
         {
-            // Save locally (offline)
-            PlayerPrefs.SetInt("bodyShapeId", current.bodyShapeId);
-            PlayerPrefs.SetInt("skinToneId", current.skinToneId);
-            PlayerPrefs.SetInt("hairId", current.hairId);
-            PlayerPrefs.SetInt("eyesId", current.eyesId);
-            PlayerPrefs.SetInt("mouthId", current.mouthId);
+            PlayerPrefs.SetInt("bodyShapeId",    current.bodyShapeId);
+            PlayerPrefs.SetInt("skinToneId",     current.skinToneId);
+            PlayerPrefs.SetInt("hairId",         current.hairId);
+            PlayerPrefs.SetInt("eyesId",         current.eyesId);
+            PlayerPrefs.SetInt("mouthId",        current.mouthId);
+            PlayerPrefs.SetInt("mascotId",       current.mascotId); // FIX: was missing from SaveToPlayer
 
-            PlayerPrefs.SetInt("mascotId", current.mascotId);
+            PlayerPrefs.SetInt("hatId",          current.hatId);
+            PlayerPrefs.SetInt("topId",          current.topId);
+            PlayerPrefs.SetInt("legwearId",      current.legwearId);
+            PlayerPrefs.SetInt("wholeOutfitId",  current.wholeOutfitId);
+            PlayerPrefs.SetInt("shoesId",        current.shoesId);
 
-            PlayerPrefs.SetInt("hatId", current.hatId);
-            PlayerPrefs.SetInt("topId", current.topId);
-            PlayerPrefs.SetInt("legwearId", current.legwearId);
-            PlayerPrefs.SetInt("wholeOutfitId", current.wholeOutfitId);
-            PlayerPrefs.SetInt("shoesId", current.shoesId);
+            PlayerPrefs.SetInt("accAId",         current.accessoryAId);
+            PlayerPrefs.SetInt("accBId",         current.accessoryBId);
+            PlayerPrefs.SetInt("accCId",         current.accessoryCId);
 
-            PlayerPrefs.SetInt("accAId", current.accessoryAId);
-            PlayerPrefs.SetInt("accBId", current.accessoryBId);
-            PlayerPrefs.SetInt("accCId", current.accessoryCId);
-
-            PlayerPrefs.SetInt("profile_saved", 1);
+            PlayerPrefs.SetInt("profile_saved",  1);
 
             PlayerPrefs.Save();
 
+            Debug.Log("[CustomisationUI] Cosmetics saved.");
         }
- 
 
         private void BackToMenu()
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
         }
 
-        // ---------- Helpers ----------
         private int Len(System.Array a) => a == null ? 0 : a.Length;
 
         private int Wrap(int value, int length)
@@ -229,19 +243,15 @@ namespace Kwiztime.UI
 
         private int WrapMinusOne(int value, int length)
         {
-            // Allows -1 for "none", otherwise 0..length-1
             if (length <= 0) return -1;
-
             if (value < -1) value = length - 1;
             if (value >= length) value = -1;
-
             return value;
         }
 
         private void SetLabel(TMP_Text t, string prefix, int id, int length, bool allowNone = false)
         {
             if (t == null) return;
-
             if (allowNone && id < 0)
                 t.text = $"{prefix}: None";
             else
@@ -252,25 +262,22 @@ namespace Kwiztime.UI
         {
             current = PlayerCosmetics.Default();
 
-            current.bodyShapeId = PlayerPrefs.GetInt("bodyShapeId", current.bodyShapeId);
-            current.skinToneId = PlayerPrefs.GetInt("skinToneId", current.skinToneId);
-            current.hairId = PlayerPrefs.GetInt("hairId", current.hairId);
-            current.eyesId = PlayerPrefs.GetInt("eyesId", current.eyesId);
-            current.mouthId = PlayerPrefs.GetInt("mouthId", current.mouthId);
+            current.bodyShapeId   = PlayerPrefs.GetInt("bodyShapeId",   current.bodyShapeId);
+            current.skinToneId    = PlayerPrefs.GetInt("skinToneId",    current.skinToneId);
+            current.hairId        = PlayerPrefs.GetInt("hairId",        current.hairId);
+            current.eyesId        = PlayerPrefs.GetInt("eyesId",        current.eyesId);
+            current.mouthId       = PlayerPrefs.GetInt("mouthId",       current.mouthId);
+            current.mascotId      = PlayerPrefs.GetInt("mascotId",      current.mascotId); // FIX: removed duplicate load line
 
-            current.mascotId = PlayerPrefs.GetInt("mascotId", current.mascotId);
-
-            current.hatId = PlayerPrefs.GetInt("hatId", current.hatId);
-            current.topId = PlayerPrefs.GetInt("topId", current.topId);
-            current.legwearId = PlayerPrefs.GetInt("legwearId", current.legwearId);
+            current.hatId         = PlayerPrefs.GetInt("hatId",         current.hatId);
+            current.topId         = PlayerPrefs.GetInt("topId",         current.topId);
+            current.legwearId     = PlayerPrefs.GetInt("legwearId",     current.legwearId);
             current.wholeOutfitId = PlayerPrefs.GetInt("wholeOutfitId", current.wholeOutfitId);
-            current.shoesId = PlayerPrefs.GetInt("shoesId", current.shoesId);
+            current.shoesId       = PlayerPrefs.GetInt("shoesId",       current.shoesId);
 
-            current.accessoryAId = PlayerPrefs.GetInt("accAId", current.accessoryAId);
-            current.accessoryBId = PlayerPrefs.GetInt("accBId", current.accessoryBId);
-            current.accessoryCId = PlayerPrefs.GetInt("accCId", current.accessoryCId);
-
-            current.mascotId = PlayerPrefs.GetInt("mascotId", current.mascotId);
+            current.accessoryAId  = PlayerPrefs.GetInt("accAId",        current.accessoryAId);
+            current.accessoryBId  = PlayerPrefs.GetInt("accBId",        current.accessoryBId);
+            current.accessoryCId  = PlayerPrefs.GetInt("accCId",        current.accessoryCId);
         }
     }
 }

@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI%20Toolkit/Kwiztime/kwiztime.uss?fileID=7433441132597879392&amp;guid=8923446223e85f147b00c990b48d5cc8&amp;type=3#kwiztime"/>
+    <ui:VisualElement name="button_holder" style="flex-grow: 1;">
+        <ui:Button text="Play Online&#10;" name="btn_PlayOnline"/>
+        <ui:Button text="Private Room" name="btn_PrivateRool"/>
+        <ui:Button text="Options" name="btn_Options" parse-escape-sequences="true"/>
+    </ui:VisualElement>
+</ui:UXML>

@@ -12,13 +12,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e506a3726182c9f41b5d513457c39f50, type: 3}
   m_Name: AvatarCosmeticsDatabase_Default
   m_EditorClassIdentifier: Assembly-CSharp::Kwiztime.Cosmetics.AvatarCosmeticsDatabase
-  bodyShapes: []
-  eyes: []
-  mouths: []
+  bodyShapes:
+  - {fileID: 8488766231584727722, guid: 2c95007626d44044b97fe47c2ffaf565, type: 3}
+  - {fileID: 6351278321978802654, guid: 6d63a3c55a719764e9448989d0df700f, type: 3}
+  - {fileID: -5555159154997259973, guid: 7a48b6714a53a3643b066ddd7b080cfb, type: 3}
+  - {fileID: -1619517170203682561, guid: 50b4821403675654d832a00a5ba6fe3f, type: 3}
+  - {fileID: 2278916871579591047, guid: cbd6735619f6e8745b4df9cbc91cb2a8, type: 3}
+  - {fileID: 5047989566341856806, guid: 6898871cdc716bf409f5d3283dbb438c, type: 3}
+  eyes:
+  - {fileID: -4241660726846597523, guid: 701746c56207f3343877e05dbfa593b5, type: 3}
+  - {fileID: -2801452711709546781, guid: 0b8e9b5f9447b974d9dc88bf6539e8aa, type: 3}
+  - {fileID: 814385939120612030, guid: 01fc1d1f83d282c40b1aa8316a14f2a4, type: 3}
+  - {fileID: -7084645399768972510, guid: 962a1028a118bdd4abc60fad298e135e, type: 3}
+  - {fileID: -8320314733581982493, guid: 7351e90c45996cf41994ba819dcfe3a0, type: 3}
+  - {fileID: 1365078125261434865, guid: 9c6d70b0ab460a946be0c5c8a59e2915, type: 3}
+  - {fileID: -3481005381830672951, guid: 126607a8a7c6946438f8d4da0a570ebd, type: 3}
+  - {fileID: -2576305768457353340, guid: 9e2c7644c327cbe4cac4e1bdcfaac346, type: 3}
+  - {fileID: 1977276549586734452, guid: 4694cd7f6b837614ab14bac4147c6d7e, type: 3}
+  mouths:
+  - {fileID: -783787465986668562, guid: c5ca9c4633a61a24880c6a7d3a6118e4, type: 3}
+  - {fileID: -7355329704720861009, guid: 2cac082a1e3fa0f4b89a94a17217b4d5, type: 3}
+  - {fileID: 1225836283333023672, guid: 18ddc97af6e5d21429d538296dc54b8c, type: 3}
   hairs: []
-  hats: []
   tops: []
   legwear: []
-  wholeOutfits: []
+  wholeOutfits:
+  - regular: {fileID: 439555306785319891, guid: 4809c8c6ead2a2d41911ddcf7863ffa6, type: 3}
+    athletic: {fileID: -3759875978435453876, guid: 42ef1fe92c1058647be83cb6cdfef699, type: 3}
+    muscly: {fileID: 2330968327320968972, guid: 3ee489db681dc204ab8e922f0a613093, type: 3}
+    curvy: {fileID: 4035204782527110327, guid: 32b7d21df9794284e80e9eab535e3ffa, type: 3}
+    chunky: {fileID: -6428244985468435768, guid: 231e2491244f3074da5cafaad67f4c98, type: 3}
+    slinky: {fileID: -5923451140308939028, guid: 2c3ca9279628d034591f96e77f6bb2f5, type: 3}
+  hairFull: []
+  hairUnderHat: []
+  hats: []
+  hatCoversHair: 
   shoes: []
   accessories: []

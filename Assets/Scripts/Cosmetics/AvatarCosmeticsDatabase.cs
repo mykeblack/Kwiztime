@@ -10,6 +10,7 @@ namespace Kwiztime.Cosmetics
         public Sprite muscly;
         public Sprite curvy;
         public Sprite chunky;
+        public Sprite slinky;
 
         public Sprite Get(int bodyShapeId)
         {
@@ -19,6 +20,7 @@ namespace Kwiztime.Cosmetics
                 2 => muscly,
                 3 => curvy,
                 4 => chunky,
+                5 => slinky,
                 _ => regular,
             };
         }
@@ -40,8 +42,15 @@ namespace Kwiztime.Cosmetics
         public BodyShapeVariant[] legwear;
         public BodyShapeVariant[] wholeOutfits;
 
+        [Header("Hair (two variants)")]
+        public Sprite[] hairFull;      // index = hairId
+        public Sprite[] hairUnderHat;  // index = hairId
+
+        [Header("Hat rules")]
+        public Sprite[] hats;          // index = hatId
+        public bool[] hatCoversHair;   // index = hatId, true if hat hides upper hair
+
         [Header("Other")]
-        public Sprite[] hats;
         public Sprite[] shoes;
         public Sprite[] accessories;
 
@@ -52,6 +61,17 @@ namespace Kwiztime.Cosmetics
         public Sprite GetEyes(int id) => Get(eyes, id);
         public Sprite GetMouth(int id) => Get(mouths, id);
         public Sprite GetHair(int id) => Get(hairs, id);
+
+        // ---------- Hair ----------
+        public Sprite GetHairFull(int id) => Get(hairFull, id);
+        public Sprite GetHairUnderHat(int id) => Get(hairUnderHat, id);
+
+        public bool HatCoversHair(int hatId)
+        {
+            if (hatId < 0) return false; // no hat => doesn't cover hair
+            if (hatCoversHair == null || hatId >= hatCoversHair.Length) return true; // safe default
+            return hatCoversHair[hatId];
+        }
 
         // ---------- Outfits ----------
         public Sprite GetTop(int id, int bodyShapeId)
@@ -67,6 +87,7 @@ namespace Kwiztime.Cosmetics
         public Sprite GetHat(int id) => Get(hats, id);
         public Sprite GetShoes(int id) => Get(shoes, id);
         public Sprite GetAccessory(int id) => Get(accessories, id);
+
 
         // ---------- Helpers ----------
         private Sprite Get(Sprite[] arr, int id)

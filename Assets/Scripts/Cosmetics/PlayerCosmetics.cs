@@ -39,24 +39,17 @@ namespace Kwiztime.Cosmetics
         {
             return new PlayerCosmetics
             {
-                // Physical defaults
                 bodyShapeId = 0,
                 skinToneId = 0,
-                hairId = 0,
+                hairId = -1,  // no hair until chosen in wardrobe
                 eyesId = 0,
                 mouthId = 0,
-
-                // Mascot default
                 mascotId = 0,
-
-                // Outfit defaults
                 hatId = -1,
-                topId = 0,            // white vest / tee
-                legwearId = 0,        // white shorts
-                wholeOutfitId = -1,
+                topId = -1,  // disabled — whole outfit used instead
+                legwearId = -1,  // disabled — whole outfit used instead
+                wholeOutfitId = 0,   // base outfit at index 0
                 shoesId = -1,
-
-                // Accessories defaults
                 accessoryAId = -1,
                 accessoryBId = -1,
                 accessoryCId = -1

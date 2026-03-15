@@ -47,7 +47,17 @@ namespace Kwiztime.UI
             // Face
             ApplySprite(eyesImage, cosmeticsDb.GetEyes(c.eyesId));
             ApplySprite(mouthImage, cosmeticsDb.GetMouth(c.mouthId));
-            ApplySprite(hairImage, cosmeticsDb.GetHair(c.hairId));
+
+            // Hair
+            Sprite hairSprite = null;
+            if (c.hairId >= 0)
+            {
+                bool covers = cosmeticsDb.HatCoversHair(c.hatId);
+                hairSprite = covers ? cosmeticsDb.GetHairUnderHat(c.hairId) : cosmeticsDb.GetHairFull(c.hairId);
+                if (covers && hairSprite == null) hairSprite = cosmeticsDb.GetHairFull(c.hairId);
+            }
+
+            ApplySprite(hairImage, hairSprite);
 
             // Outfits (whole overrides top+legwear)
             bool hasWhole = c.wholeOutfitId >= 0;
@@ -96,6 +106,11 @@ namespace Kwiztime.UI
         {
             if (img == null) return;
             img.gameObject.SetActive(active);
+        }
+
+        public void SetHairSprite(Sprite hairSprite)
+        {
+            ApplySprite(hairImage, hairSprite);
         }
     }
 }

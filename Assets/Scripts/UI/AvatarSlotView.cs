@@ -110,7 +110,22 @@ namespace Kwiztime.UI
             // ---- Face ----
             ApplySprite(eyesImage, cosmeticsDb.GetEyes(p.eyesId));
             ApplySprite(mouthImage, cosmeticsDb.GetMouth(p.mouthId));
-            ApplySprite(hairImage, cosmeticsDb.GetHair(p.hairId));
+            
+            // Hair: choose full vs under-hat depending on hat
+            Sprite hairSprite = null;
+            if (p.hairId >= 0)
+            {
+                bool covers = cosmeticsDb.HatCoversHair(p.hatId);
+                hairSprite = covers
+                    ? cosmeticsDb.GetHairUnderHat(p.hairId)
+                    : cosmeticsDb.GetHairFull(p.hairId);
+
+                // fallback if underHat missing
+                if (covers && hairSprite == null)
+                    hairSprite = cosmeticsDb.GetHairFull(p.hairId);
+            }
+
+            ApplySprite(hairImage, hairSprite);
 
             // ---- Outfit ----
             bool hasWholeOutfit = p.wholeOutfitId >= 0;

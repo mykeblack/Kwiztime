@@ -6,6 +6,14 @@ namespace Kwiztime.Cosmetics
     public class MascotDatabase : ScriptableObject
     {
         public Sprite[] mascots; // index = mascotId
-        public Sprite Get(int id) => (id >= 0 && id < mascots.Length) ? mascots[id] : null;
+
+        // FIX: added null guard on mascots array to prevent NullReferenceException
+        // if the array is never assigned in the Inspector
+        public Sprite Get(int id)
+        {
+            if (mascots == null || mascots.Length == 0) return null;
+            if (id < 0 || id >= mascots.Length) return null;
+            return mascots[id];
+        }
     }
 }

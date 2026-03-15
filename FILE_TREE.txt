@@ -1,0 +1,126 @@
+Kwiztime_Unity_FileTree
+  - README.txt
+Assets
+  Scenes
+    - Boot.unity.txt
+    - Game.unity.txt
+    - MainMenu.unity.txt
+  Scripts
+    Core
+      - Bootstrap.cs
+      - BuildDefines.cs
+      - GameConfig.cs
+      - SceneLoader.cs
+    Network
+      - KwizNetworkHUD.cs
+      - KwizNetworkManager.cs
+      - KwizPlayer.cs
+      - KwizRoomManager.cs
+      - NetConstants.cs
+      - RoomCodeService.cs
+      - RoomRegistry.cs
+    Server
+      - HeadlessEntrypoint.cs
+      - ServerCLIArgs.cs
+    Gameplay
+      - ClientEvents.cs
+      - GameState.cs
+      - GameStateMachine.cs
+      - MatchConfig.cs
+      - PlayerState.cs
+      - ServerEvents.cs
+    Modes
+      - BaseModeController.cs
+      - CircleDashMode.cs
+      - ClassicQuizMode.cs
+      - IGameModeController.cs
+      - PuzzlePartyMode.cs
+      - SpeedSprintMode.cs
+      - SurvivalBalloonMode.cs
+      Survival
+        - SurvivalEliminationRules.cs
+      CircleDash
+        - CircleDashSelection.cs
+        - CircleZoneTrigger.cs
+    Data
+      - Question.cs
+      - QuestionPack.cs
+    Services
+      - QuestionService.cs
+      - QuestionValidator.cs
+    Bots
+      - BotBrain.cs
+      - BotEmoteDriver.cs
+      - BotManager.cs
+      - BotPersonality.cs
+      - BotProfile.cs
+      - BotRoster.cs
+      - LegendBotSystem.cs
+    UI
+      - LobbyUI.cs
+      - MainMenuUI.cs
+      - ModeSelectUI.cs
+      - QuestionUI.cs
+      - ResultsUI.cs
+      - ScoreboardUI.cs
+      - ToastController.cs
+      - UIRouter.cs
+    Cosmetics
+      - AvatarCustomizer.cs
+      - CosmeticCategory.cs
+      - CosmeticEquipper.cs
+      - CosmeticInventory.cs
+      - CosmeticItem.cs
+      - MascotController.cs
+    Economy
+      - CurrencyType.cs
+      - EconomyRules.cs
+      - RewardCalculator.cs
+      - ShopService.cs
+      - StarToCoinExchange.cs
+      - Wallet.cs
+    Audio
+      - AudioDatabase.cs
+      - AudioEventKey.cs
+      - AudioManager.cs
+      - AudioSettings.cs
+    Backend
+      - ApiClient.cs
+      - AuthService.cs
+      - DtoModels.cs
+      - Endpoints.cs
+      - SaveService.cs
+      - SessionToken.cs
+      - StatsService.cs
+    IAP
+      - IapService.cs
+      - ReceiptValidator.cs
+      - StoreCatalog.cs
+    QA
+      - CommandConsole.cs
+      - DebugOverlay.cs
+      - NetworkDiagnostics.cs
+    Build
+      - BuildPipeline.cs
+  Prefabs
+    - PF_Bootstrap.prefab.txt
+    - PF_BotPlayer.prefab.txt
+    - PF_GameDirector.prefab.txt
+    - PF_NetworkRoot.prefab.txt
+    - PF_Player.prefab.txt
+    - PF_QuestionService.prefab.txt
+    - PF_Room.prefab.txt
+    - PF_UI_HUDCanvas.prefab.txt
+    - PF_UI_MainMenuCanvas.prefab.txt
+  Art
+  Audio
+  ScriptableObjects
+    - SO_AudioDatabase.asset.txt
+    - SO_BotRoster.asset.txt
+    - SO_CosmeticCatalog.asset.txt
+    - SO_GameConfig.asset.txt
+    - SO_LegendBotRoster.asset.txt
+    - SO_MascotCatalog.asset.txt
+    - SO_QuestionPack_Starter.asset.txt
+  StreamingAssets
+    - questions_starter.json
